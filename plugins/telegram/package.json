@@ -1,0 +1,13 @@
+{
+  "name": "claude-gateway-telegram",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": "./server.ts",
+  "scripts": {
+    "start": "bun install --no-summary && bun server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "grammy": "^1.21.0"
+  }
+}

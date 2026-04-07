@@ -1,0 +1,15 @@
+{
+  "update_id": 100000002,
+  "message": {
+    "message_id": 2,
+    "from": {
+      "id": 111222333,
+      "first_name": "GroupUser"
+    },
+    "chat": {
+      "id": -1001234567890,
+      "type": "supergroup"
+    },
+    "text": "Hello everyone!"
+  }
+}

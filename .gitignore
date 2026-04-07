@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment & config
+.env
+.env.*
+!.env.example
+config.json
+!config.example.json
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test coverage
+coverage/
+
+# Planning
+planning*.md
+design*.md
+testcase*.md
+
+.claude-plugin/
+.claude

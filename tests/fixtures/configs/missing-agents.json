@@ -1,0 +1,6 @@
+{
+  "gateway": {
+    "logDir": "/tmp/logs",
+    "timezone": "UTC"
+  }
+}

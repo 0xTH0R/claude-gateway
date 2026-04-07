@@ -1,0 +1,40 @@
+{
+  "gateway": {
+    "logDir": "/tmp/claude-gateway-test-logs",
+    "timezone": "Asia/Bangkok"
+  },
+  "agents": [
+    {
+      "id": "alfred",
+      "description": "Primary personal assistant bot",
+      "workspace": "/tmp/alfred/workspace",
+      "env": "/tmp/alfred/.env",
+      "telegram": {
+        "botToken": "${ALFRED_BOT_TOKEN}",
+        "allowedUsers": [991177022],
+        "dmPolicy": "allowlist"
+      },
+      "claude": {
+        "model": "claude-opus-4-6",
+        "dangerouslySkipPermissions": true,
+        "extraFlags": []
+      }
+    },
+    {
+      "id": "baerbel",
+      "description": "Team support bot",
+      "workspace": "/tmp/baerbel/workspace",
+      "env": "/tmp/baerbel/.env",
+      "telegram": {
+        "botToken": "${BAERBEL_BOT_TOKEN}",
+        "allowedUsers": [],
+        "dmPolicy": "open"
+      },
+      "claude": {
+        "model": "claude-sonnet-4-6",
+        "dangerouslySkipPermissions": false,
+        "extraFlags": []
+      }
+    }
+  ]
+}

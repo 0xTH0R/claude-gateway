@@ -1,0 +1,40 @@
+{
+  "gateway": {
+    "logDir": "/tmp/logs",
+    "timezone": "UTC"
+  },
+  "agents": [
+    {
+      "id": "alfred",
+      "description": "First alfred",
+      "workspace": "/tmp/alfred/workspace",
+      "env": "/tmp/alfred/.env",
+      "telegram": {
+        "botToken": "token-a",
+        "allowedUsers": [],
+        "dmPolicy": "open"
+      },
+      "claude": {
+        "model": "claude-sonnet-4-6",
+        "dangerouslySkipPermissions": false,
+        "extraFlags": []
+      }
+    },
+    {
+      "id": "alfred",
+      "description": "Second alfred (duplicate)",
+      "workspace": "/tmp/alfred2/workspace",
+      "env": "/tmp/alfred2/.env",
+      "telegram": {
+        "botToken": "token-b",
+        "allowedUsers": [],
+        "dmPolicy": "open"
+      },
+      "claude": {
+        "model": "claude-sonnet-4-6",
+        "dangerouslySkipPermissions": false,
+        "extraFlags": []
+      }
+    }
+  ]
+}

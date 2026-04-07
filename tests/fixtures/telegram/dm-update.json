@@ -1,0 +1,15 @@
+{
+  "update_id": 100000001,
+  "message": {
+    "message_id": 1,
+    "from": {
+      "id": 991177022,
+      "first_name": "Max"
+    },
+    "chat": {
+      "id": 991177022,
+      "type": "private"
+    },
+    "text": "Hello Alfred!"
+  }
+}
