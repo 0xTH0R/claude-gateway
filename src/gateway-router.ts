@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
 import { Server } from 'http';
 import { AgentRunner } from './agent-runner';
-import { AgentConfig, AgentStats, HeartbeatResult } from './types';
+import { AgentConfig, AgentStats, GatewayConfig, HeartbeatResult } from './types';
 import { CronScheduler } from './cron-scheduler';
 import { generateDashboardHtml } from './web-ui';
+import { createApiRouter } from './api-router';
 
 export class GatewayRouter {
   private readonly agents: Map<string, AgentRunner>;
@@ -31,10 +32,17 @@ export class GatewayRouter {
     agents: Map<string, AgentRunner>,
     configs: Map<string, AgentConfig>,
     schedulers?: Map<string, CronScheduler>,
+    gatewayConfig?: GatewayConfig,
   ) {
     this.agents = agents;
     this.configs = configs;
     this.app = express();
+
+    // Mount API router if api keys are configured
+    if (gatewayConfig?.gateway?.api?.keys?.length) {
+      const apiRouter = createApiRouter(agents, configs, gatewayConfig.gateway.api.keys);
+      this.app.use('/api', apiRouter);
+    }
 
     // Initialise counters for all known agents
     for (const [id, runner] of agents) {

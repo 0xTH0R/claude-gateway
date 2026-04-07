@@ -139,7 +139,7 @@ export class SessionProcess extends EventEmitter {
     });
 
     const proc = spawn(claudeBin, allArgs, {
-      env: { ...process.env, CLAUDE_WORKSPACE: this.agentConfig.workspace },
+      env: { ...process.env, CLAUDE_WORKSPACE: this.agentConfig.workspace, TELEGRAM_BOT_TOKEN: this.agentConfig.telegram.botToken },
       cwd: this.agentConfig.workspace,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
