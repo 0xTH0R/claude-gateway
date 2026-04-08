@@ -949,7 +949,9 @@ async function resumeWizard(state: WizardState): Promise<void> {
   clearWizardState();
 }
 
-main().catch((err) => {
-  console.error('\nFatal error:', (err as Error).message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('\nFatal error:', (err as Error).message);
+    process.exit(1);
+  });
+}

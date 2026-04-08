@@ -32,6 +32,7 @@ coverage/
 .claude
 
 # Planning
+archive/
 planning*.md
 design*.md
 testcase*.md

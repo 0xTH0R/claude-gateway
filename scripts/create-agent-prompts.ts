@@ -113,5 +113,7 @@ Update this agent.md to follow current best practices:
     - Reactions: React to messages like a human would — use the react tool. Max 1 reaction per message.
     - Signature emoji: preserve any existing signature emoji setting.
 - Keep the file under 500 words
-- Output ONLY the updated agent.md content, no extra explanation`;
+
+Output ONLY the updated agent.md content — no preamble, no explanation, no commentary.
+Start directly with the first line of the agent.md content.`;
 }

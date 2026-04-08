@@ -1,7 +1,7 @@
 {
   "name": "claude-gateway",
-  "version": "1.0.0",
-  "description": "Multi-agent Telegram gateway for Claude",
+  "version": "1.0.1",
+  "description": "Multi-agent gateway for Claude",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
