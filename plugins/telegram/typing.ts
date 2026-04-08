@@ -14,7 +14,7 @@
  */
 
 export const STATUS_MESSAGES = [
-  '⏳ Claude is thinking...',
+  '⏳ Thinking...',
   '🔍 Analyzing your request...',
   '⚙️ Working on it...',
   '📝 Preparing a response...',
@@ -201,9 +201,12 @@ export function createWorkingStateManager(
             : `${secs}s`
         const currentLine = s.lastDetail ?? STATUS_MESSAGES[tick % STATUS_MESSAGES.length]!
         tick++
-        // Build multi-line status: recent history (dimmed) + current line + elapsed
+        // Build multi-line status: history (☑️) + current (🕐) + elapsed
         const historyLines = s.recentDetails.slice(-4);
-        const lines = [...historyLines, currentLine, `(elapsed: ${elapsedStr})`]
+        const hasHistory = historyLines.length > 0
+        const formattedHistory = hasHistory ? historyLines.map(d => `☑️ : ${d}`) : []
+        const formattedCurrent = hasHistory ? `🕐 : ${currentLine}` : currentLine
+        const lines = [...formattedHistory, formattedCurrent, `(elapsed: ${elapsedStr})`]
         const text = lines.join('\n')
         if (s.statusMessageId === null) {
           try {

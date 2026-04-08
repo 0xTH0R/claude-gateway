@@ -8,13 +8,32 @@ Telegram Bot A ──► TelegramReceiver (agent A) ──► SessionProcess(cha
 Telegram Bot B ──► TelegramReceiver (agent B) ──► SessionProcess(chat:333) ──► Claude subprocess
 
 HTTP Client ──► POST /api/v1/agents/:id/messages ──► SessionProcess(uuid) ──► Claude subprocess
+             (sync JSON or SSE stream)
 
                         ↑
                   GatewayRouter (/health, /status, /ui, /api)
                   CronScheduler (heartbeat.md)
+                  TypingManager (live status + typing indicators)
 ```
 
 Each agent runs a **dedicated TelegramReceiver** (single Telegram poller per bot token) and a **session pool** of isolated Claude subprocesses — one per chat or API session. Sessions persist their history via `SessionStore`, so Claude remembers the conversation even after idle restart.
+
+---
+
+## Features
+
+- **Multi-agent** — run multiple Telegram bots from a single gateway, each with isolated sessions
+- **Agent identity** — define personality, tone, and rules via workspace markdown files
+- **Live status messages** — real-time Telegram status updates showing what the agent is doing (tool usage, thinking, progress)
+- **Typing indicators** — continuous typing animation while the agent is working
+- **Streaming API** — SSE (Server-Sent Events) endpoint for real-time response streaming
+- **Auto-forward** — agent text output automatically forwarded to Telegram even without explicit reply tool calls
+- **Heartbeat / scheduled tasks** — cron-based proactive messages and recurring tasks
+- **Long-term memory** — persistent memory system across sessions
+- **Config auto-migration** — automatic schema migration when config format changes
+- **Access control** — allowlist, open, or pairing-based Telegram access policies
+- **HTTP API** — REST API with key-based auth for external integrations
+- **Session persistence** — conversation history saved and restored across restarts
 
 ---
 
@@ -198,6 +217,65 @@ AgentRunner  (session pool manager)
 
 ---
 
+## Live Status Messages
+
+While an agent is working, the gateway sends real-time status updates to Telegram showing what the agent is doing:
+
+```
+✅ 🧠 Analyzing the codebase structure...
+✅ 📖 Reading: src/agent-runner.ts
+✅ 🔍 Searching for: "sendMessage" in src/
+🕐 ✏️ Editing: src/typing.ts
+(elapsed: 2m 30s)
+```
+
+- **Tool tracking** — each tool call is displayed with a descriptive label (e.g. `📖 Reading: config.ts`, `⚡ Running: npm test`)
+- **History** — previous steps shown with ✅, current step with 🕐
+- **Thinking** — agent's reasoning shown with 🧠
+- **Elapsed time** — total time since the agent started working
+- **Auto-cleanup** — status message is deleted when the agent finishes
+
+Status updates are sent every 5-10 seconds (first update at 5s, then every 10s).
+
+---
+
+## Streaming API (SSE)
+
+The HTTP API supports Server-Sent Events for real-time streaming responses.
+
+**Request:**
+
+```bash
+curl -N -X POST \
+  -H "X-Api-Key: my-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain this code", "stream": true}' \
+  http://localhost:3000/api/v1/agents/alfred/messages
+```
+
+**Response (SSE):**
+
+```
+data: {"type":"text_delta","content":"Let me"}
+data: {"type":"text_delta","content":" explain..."}
+data: {"type":"tool_use","tool":"Read","detail":"src/index.ts"}
+data: {"type":"result","content":"Here's the explanation...","session_id":"abc-123","duration_ms":4200}
+```
+
+**Stream event types:**
+
+| Type | Description |
+|------|-------------|
+| `text_delta` | Incremental text output |
+| `tool_use` | Tool being invoked (tool name + detail) |
+| `thinking` | Agent reasoning (if available) |
+| `result` | Final result with session_id and duration |
+| `error` | Error event |
+
+Set `stream: false` (default) for the synchronous JSON response mode.
+
+---
+
 ## HTTP API
 
 When `gateway.api.keys` is configured, the gateway exposes a REST API for external clients.
@@ -301,6 +379,7 @@ curl -X POST \
 > - `session_id` is optional — omit for a stateless one-shot call
 > - Sessions idle-timeout after `idleTimeoutMinutes` (default 30 min); history is restored automatically on next message
 > - Error 409 = session is currently processing a request — wait and retry
+> - Add `"stream": true` to the request body for SSE streaming (see [Streaming API](#streaming-api-sse))
 
 ---
 
@@ -310,7 +389,7 @@ See [Quickstart: Using the Agent API](#quickstart-using-the-agent-api) for full 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/agents/:agentId/messages` | Send a message, receive response synchronously |
+| `POST` | `/api/v1/agents/:agentId/messages` | Send a message — sync JSON or SSE stream |
 | `GET` | `/api/v1/agents` | List agents accessible by the provided key |
 
 **Error responses (POST):**
@@ -321,6 +400,7 @@ See [Quickstart: Using the Agent API](#quickstart-using-the-agent-api) for full 
 | 401 | Missing API key |
 | 403 | Invalid key or key has no access to that agent |
 | 404 | Agent ID not found |
+| 409 | Session is busy processing another request |
 | 504 | Agent did not respond within 60s |
 | 500 | Internal error |
 
@@ -341,22 +421,37 @@ claude-gateway/
 │   ├── telegram-receiver.ts            ← standalone Telegram poller (1 per agent)
 │   ├── session-store.ts                ← persist/load conversation history (.jsonl)
 │   ├── gateway-router.ts               ← HTTP server (/health, /status, /ui, /api)
-│   ├── api-router.ts                   ← REST API router (POST /v1/agents/:id/messages)
+│   ├── api-router.ts                   ← REST API router (sync + SSE streaming)
 │   ├── api-auth.ts                     ← API key auth middleware (timing-safe)
 │   ├── config-loader.ts                ← load + validate config.json
+│   ├── config-migrator.ts              ← auto-migration for config schema changes
 │   ├── cron-scheduler.ts               ← heartbeat task scheduler
+│   ├── heartbeat-parser.ts             ← parse heartbeat.md YAML
+│   ├── heartbeat-history.ts            ← track scheduled task execution
+│   ├── memory-manager.ts               ← long-term memory persistence
+│   ├── workspace-loader.ts             ← assembles CLAUDE.md from workspace files
+│   ├── context-isolation.ts            ← context guard for session isolation
+│   ├── security.ts                     ← input validation and sanitization
+│   ├── webhook-manager.ts              ← webhook event dispatch
+│   ├── logger.ts                       ← structured logging with per-agent files
 │   ├── types.ts                        ← shared TypeScript types
-│   └── workspace-loader.ts             ← assembles CLAUDE.md from workspace files
+│   └── web-ui.ts                       ← live HTML dashboard
 ├── scripts/
-│   ├── create-agent.ts                 ← interactive wizard (make create-agent)
-│   ├── pair.ts                         ← approve Telegram pairing (make pair)
+│   ├── create-agent.ts                 ← interactive agent creation wizard
+│   ├── create-agent-prompts.ts         ← agent workspace generation prompts
+│   ├── update-agent.ts                 ← agent config updater
+│   ├── interactive-select.ts           ← interactive selection UI helper
+│   ├── pair.ts                         ← approve Telegram pairing
 │   └── setup-claude-settings.js        ← enables channelsEnabled in Claude Code
 └── plugins/
     ├── marketplace.json                ← plugin registry
     └── telegram/
-        ├── server.ts                   ← Telegram plugin (MCP server + receiver mode)
+        ├── server.ts                   ← Telegram MCP server (reply/react/edit/download tools)
+        ├── typing.ts                   ← typing indicator + live status messages
+        ├── pure.ts                     ← pure utility functions
         └── skills/
-            └── access/SKILL.md         ← /telegram:access skill
+            ├── access/SKILL.md         ← /telegram:access skill
+            └── configure/SKILL.md      ← /telegram:configure skill
 ```
 
 ### Agents data (`~/.claude-gateway/`)
@@ -405,6 +500,17 @@ tasks:
 - `interval` — shorthand: `30m`, `1h`, `6h`, `1d`, `1w`
 - If the agent replies with `HEARTBEAT_OK` (case-insensitive), no message is sent to Telegram
 - `rateLimitMinutes` in config suppresses tasks if a proactive message was already sent recently (default: 30 min)
+
+---
+
+## Config Auto-Migration
+
+When the config schema changes (new fields added in `config.template.json`), the gateway automatically detects and migrates your `config.json`:
+
+- Preserves all existing values
+- Adds missing fields with defaults from the template
+- Prompts for confirmation before writing (use `--auto-migrate` to skip)
+- Tracks schema version for future migrations
 
 ---
 
@@ -497,3 +603,8 @@ npm run typecheck
 **API returns 403**
 - Check the key value matches exactly (env var interpolation uses `${VAR}` syntax)
 - Verify the key's `agents` list includes the target agent ID, or set `"agents": "*"`
+
+**Status messages not appearing in Telegram**
+- First status update is sent after 5 seconds — very fast tasks may complete before it fires
+- Check that the Telegram plugin is running in `SEND_ONLY` mode for session subprocesses
+- Verify the bot has permission to send messages in the chat

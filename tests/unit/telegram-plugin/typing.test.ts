@@ -210,7 +210,7 @@ describe('createWorkingStateManager', () => {
 
       expect(bot.sendMessage).toHaveBeenCalledWith(
         CHAT_ID,
-        expect.stringContaining('Claude is thinking'),
+        expect.stringContaining('Thinking'),
       )
     })
 
