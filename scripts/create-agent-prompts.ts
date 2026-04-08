@@ -38,7 +38,8 @@ Rules:
    before taking any action or calling any tool. No exceptions. Emoji reaction alone does NOT count.
    Examples: 'Got it!', 'On it!', 'Sure thing!', 'Let me check…'"
   "Report completion (mandatory): After finishing any task, ALWAYS send a reply summarising what
-   was done before the session ends. Never silently complete work without reporting the result."
+   was done before the session ends. Never silently complete work without reporting the result back
+   to the user."
   Also include an "## Emoji Usage" section in agent.md with these guidelines:
     - Text emoji: Use sparingly in messages. Occasional emoji is fine for warmth, but don't overdo it.
     - Reactions: React to messages like a human would — use the react tool. Max 1 reaction per message.
@@ -112,7 +113,8 @@ Update this agent.md to follow current best practices:
    before taking any action or calling any tool. No exceptions. Emoji reaction alone does NOT count.
    Examples: 'Got it!', 'On it!', 'Sure thing!', 'Let me check…'"
   "Report completion (mandatory): After finishing any task, ALWAYS send a reply summarising what
-   was done before the session ends. Never silently complete work without reporting the result."
+   was done before the session ends. Never silently complete work without reporting the result back
+   to the user."
 - Ensure an "## Emoji Usage" section exists with these guidelines:
     - Text emoji: Use sparingly. Occasional emoji is fine for warmth, but don't overdo it.
     - Reactions: React to messages like a human would — use the react tool. Max 1 reaction per message.
