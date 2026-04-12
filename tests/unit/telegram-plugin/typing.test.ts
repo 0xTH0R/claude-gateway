@@ -625,14 +625,14 @@ describe('createWorkingStateManager', () => {
   })
 
   describe('auto-forward dedup (.replied guard)', () => {
-    it('U-TY-07: forwards text when .replied does NOT exist', async () => {
+    it('U-TY-07: forwards text when .replied does NOT exist (JSON format)', async () => {
       const bot = makeBotApi()
       const fsApi = makeFsApi()
       const mgr = createWorkingStateManager(TYPING_DIR, bot, fsApi)
 
       mgr.start(CHAT_ID)
-      // Simulate .forward file with result text (no .replied)
-      fsApi._files.set(`${TYPING_DIR}/${CHAT_ID}.forward`, 'Hello from agent')
+      // Simulate .forward file with result text in JSON format (no .replied)
+      fsApi._files.set(`${TYPING_DIR}/${CHAT_ID}.forward`, JSON.stringify({ text: 'Hello from agent', format: 'text' }))
 
       // Remove signal file to trigger stop on next tick
       fsApi._files.delete(`${TYPING_DIR}/${CHAT_ID}`)
@@ -641,7 +641,52 @@ describe('createWorkingStateManager', () => {
       await Promise.resolve()
       await Promise.resolve()
 
-      expect(bot.sendMessage).toHaveBeenCalledWith(CHAT_ID, 'Hello from agent')
+      expect(bot.sendMessage).toHaveBeenCalledWith(CHAT_ID, 'Hello from agent', {})
+    })
+
+    it('U-TY-07b: forwards text with MarkdownV2 parse_mode when format is markdownv2', async () => {
+      const bot = makeBotApi()
+      const fsApi = makeFsApi()
+      const mgr = createWorkingStateManager(TYPING_DIR, bot, fsApi)
+
+      mgr.start(CHAT_ID)
+      // Simulate .forward file with markdownv2 format
+      fsApi._files.set(
+        `${TYPING_DIR}/${CHAT_ID}.forward`,
+        JSON.stringify({ text: 'Hello `code` world', format: 'markdownv2' }),
+      )
+
+      // Remove signal file to trigger stop on next tick
+      fsApi._files.delete(`${TYPING_DIR}/${CHAT_ID}`)
+      jest.advanceTimersByTime(TYPING_INTERVAL_MS)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(bot.sendMessage).toHaveBeenCalledWith(
+        CHAT_ID,
+        'Hello `code` world',
+        { parse_mode: 'MarkdownV2' },
+      )
+    })
+
+    it('U-TY-07c: falls back to plain text when .forward contains non-JSON (old format)', async () => {
+      const bot = makeBotApi()
+      const fsApi = makeFsApi()
+      const mgr = createWorkingStateManager(TYPING_DIR, bot, fsApi)
+
+      mgr.start(CHAT_ID)
+      // Simulate old plain-text .forward file (backward compatibility)
+      fsApi._files.set(`${TYPING_DIR}/${CHAT_ID}.forward`, 'Plain text fallback')
+
+      // Remove signal file to trigger stop on next tick
+      fsApi._files.delete(`${TYPING_DIR}/${CHAT_ID}`)
+      jest.advanceTimersByTime(TYPING_INTERVAL_MS)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(bot.sendMessage).toHaveBeenCalledWith(CHAT_ID, 'Plain text fallback', {})
     })
 
     it('U-TY-08: skips forward when .replied EXISTS (dedup)', async () => {
