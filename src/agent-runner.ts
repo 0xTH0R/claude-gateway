@@ -440,12 +440,14 @@ export class AgentRunner extends EventEmitter {
   /**
    * Write result text to a forward file so the typing plugin sends it to Telegram.
    * Used when the agent produces text output but didn't call mcp__telegram__reply.
+   * The file is written as JSON { text, format } so the receiver can apply the
+   * correct parse_mode when sending the Telegram message.
    */
-  private writeAutoForward(chatId: string, text: string): void {
+  private writeAutoForward(chatId: string, text: string, format: 'text' | 'markdownv2' = 'text'): void {
     const typingDir = path.join(this.agentConfig.workspace, '.telegram-state', 'typing');
     try {
       fs.mkdirSync(typingDir, { recursive: true });
-      fs.writeFileSync(path.join(typingDir, `${chatId}.forward`), text);
+      fs.writeFileSync(path.join(typingDir, `${chatId}.forward`), JSON.stringify({ text, format }));
     } catch {
       // Non-fatal
     }

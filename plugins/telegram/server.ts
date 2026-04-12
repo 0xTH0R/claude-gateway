@@ -87,7 +87,7 @@ const typingManager = createWorkingStateManager(
   TYPING_DIR,
   {
     sendChatAction: (chatId, action) => bot.api.sendChatAction(chatId, action),
-    sendMessage: (chatId, text) => bot.api.sendMessage(chatId, text),
+    sendMessage: (chatId, text, opts) => bot.api.sendMessage(chatId, text, opts),
     editMessageText: (chatId, msgId, text) => bot.api.editMessageText(chatId, msgId, text),
     deleteMessage: (chatId, msgId) => bot.api.deleteMessage(chatId, msgId),
     setMessageReaction: (chatId, msgId, emoji) =>

@@ -319,6 +319,36 @@ describe('AgentRunner — typing error notification', () => {
   });
 
   // --------------------------------------------------------------------------
+  // U-AR-TYPING-AF-01: writeAutoForward writes JSON { text, format } to .forward file
+  // --------------------------------------------------------------------------
+  it('U-AR-TYPING-AF-01: writeAutoForward writes JSON with default text format', () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+
+    (runner as unknown as { writeAutoForward: (chatId: string, text: string) => void })
+      .writeAutoForward('123456789', 'Hello from agent');
+
+    const forwardFile = path.join(getTypingDir(), '123456789.forward');
+    expect(fs.existsSync(forwardFile)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(forwardFile, 'utf8'));
+    expect(content).toEqual({ text: 'Hello from agent', format: 'text' });
+  });
+
+  // --------------------------------------------------------------------------
+  // U-AR-TYPING-AF-02: writeAutoForward writes JSON with markdownv2 format
+  // --------------------------------------------------------------------------
+  it('U-AR-TYPING-AF-02: writeAutoForward writes JSON with markdownv2 format', () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+
+    (runner as unknown as { writeAutoForward: (chatId: string, text: string, format: string) => void })
+      .writeAutoForward('123456789', 'Hello `code`', 'markdownv2');
+
+    const forwardFile = path.join(getTypingDir(), '123456789.forward');
+    expect(fs.existsSync(forwardFile)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(forwardFile, 'utf8'));
+    expect(content).toEqual({ text: 'Hello `code`', format: 'markdownv2' });
+  });
+
+  // --------------------------------------------------------------------------
   // U-AR-TYPING-03: spawn error writes SPAWN_FAILED typing error file
   // --------------------------------------------------------------------------
   it('U-AR-TYPING-03: spawn error via callback writes SPAWN_FAILED typing error', async () => {

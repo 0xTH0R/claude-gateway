@@ -67,7 +67,7 @@ export interface WorkingState {
 
 export interface BotApi {
   sendChatAction(chatId: string, action: 'typing'): Promise<unknown>
-  sendMessage(chatId: string, text: string): Promise<{ message_id: number }>
+  sendMessage(chatId: string, text: string, opts?: { parse_mode?: 'MarkdownV2' | 'HTML' | 'Markdown' }): Promise<{ message_id: number }>
   editMessageText(chatId: string, msgId: number, text: string): Promise<unknown>
   deleteMessage(chatId: string, msgId: number): Promise<unknown>
   setMessageReaction(chatId: string, msgId: number, emoji: string): Promise<unknown>
@@ -146,9 +146,21 @@ export function createWorkingStateManager(
     if (fsApi.existsSync(forwardPath)) {
       if (!alreadyReplied) {
         try {
-          const text = fsApi.readFileSync(forwardPath, 'utf8').trim()
-          if (text) {
-            await botApi.sendMessage(chatId, text).catch(() => {})
+          const raw = fsApi.readFileSync(forwardPath, 'utf8').trim()
+          let forwardText: string
+          let parseMode: 'MarkdownV2' | undefined
+          try {
+            const parsed = JSON.parse(raw) as { text: string; format: string }
+            forwardText = parsed.text
+            parseMode = parsed.format === 'markdownv2' ? 'MarkdownV2' : undefined
+          } catch {
+            // Fallback: treat as plain text (old format compatibility)
+            forwardText = raw
+            parseMode = undefined
+          }
+          if (forwardText) {
+            const msgOpts = parseMode ? { parse_mode: parseMode } : {}
+            await botApi.sendMessage(chatId, forwardText, msgOpts).catch(() => {})
           }
         } catch {}
       }
