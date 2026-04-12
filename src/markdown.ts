@@ -9,12 +9,14 @@
  */
 export function hasMarkdown(text: string): boolean {
   return (
-    /\*\*[^*\n]+\*\*/m.test(text) ||   // **bold**
-    /`[^`\n]+`/m.test(text) ||          // `inline code`
-    /^```/m.test(text) ||               // ```code block
-    /^#{1,6}\s/m.test(text) ||          // # header
-    /^\|.+\|/m.test(text) ||            // | table row |
-    /\[.+?\]\(https?:\/\/.+?\)/m.test(text) // [link](url)
+    /\*\*[^*\n]+\*\*/m.test(text) ||          // **bold**
+    /\*[^\s*\n][^*\n]*\*/m.test(text) ||       // *italic*
+    /`[^`\n]+`/m.test(text) ||                 // `inline code`
+    /^```/m.test(text) ||                      // ```code block
+    /^#{1,6}\s/m.test(text) ||                 // # header
+    /^\|.+\|/m.test(text) ||                   // | table row |
+    /^- /m.test(text) ||                       // - bullet list
+    /\[.+?\]\(https?:\/\/.+?\)/m.test(text)   // [link](url)
   )
 }
 
@@ -23,6 +25,14 @@ export function hasMarkdown(text: string): boolean {
  */
 function escapePlain(text: string): string {
   return text.replace(/([_*[\]()~`>#+=|{}.!\-\\])/g, '\\$1')
+}
+
+/**
+ * Converts Markdown bullet list lines (- item) to bullet character (• item).
+ * Telegram MarkdownV2 does not support native bullet lists.
+ */
+function convertBulletLists(text: string): string {
+  return text.replace(/^- /gm, '• ')
 }
 
 /**
@@ -67,6 +77,7 @@ function convertTablesToCodeBlocks(text: string): string {
  * - plain text → all special chars escaped
  */
 export function toMarkdownV2(text: string): string {
+  text = convertBulletLists(text)
   text = convertTablesToCodeBlocks(text)
 
   const out: string[] = []
@@ -112,6 +123,16 @@ export function toMarkdownV2(text: string): string {
       }
     }
 
+    // Italic *...* (single asterisk, not bold)
+    if (text[i] === '*' && text[i + 1] !== '*' && text[i + 1] !== ' ' && text[i + 1] !== undefined) {
+      const closeIdx = text.indexOf('*', i + 1)
+      if (closeIdx !== -1 && !text.slice(i + 1, closeIdx).includes('\n')) {
+        out.push('_' + escapePlain(text.slice(i + 1, closeIdx)) + '_')
+        i = closeIdx + 1
+        continue
+      }
+    }
+
     // Link [text](url)
     if (text[i] === '[') {
       const closeBracket = text.indexOf(']', i + 1)
@@ -150,6 +171,7 @@ export function toMarkdownV2(text: string): string {
         text.startsWith('```', j) ||
         (c === '`' && text[j + 1] !== '`') ||
         text.startsWith('**', j) ||
+        (c === '*' && text[j + 1] !== '*' && text[j + 1] !== ' ') ||
         c === '[' ||
         (c === '#' && (j === 0 || text[j - 1] === '\n'))
       ) break

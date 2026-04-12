@@ -200,16 +200,22 @@ export function gateLogic(
 export function hasMarkdown(text: string): boolean {
   return (
     /\*\*[^*\n]+\*\*/m.test(text) ||
+    /\*[^\s*\n][^*\n]*\*/m.test(text) ||
     /`[^`\n]+`/m.test(text) ||
     /^```/m.test(text) ||
     /^#{1,6}\s/m.test(text) ||
     /^\|.+\|/m.test(text) ||
+    /^- /m.test(text) ||
     /\[.+?\]\(https?:\/\/.+?\)/m.test(text)
   )
 }
 
 function escapePlain(text: string): string {
   return text.replace(/([_*[\]()~`>#+=|{}.!\-\\])/g, '\\$1')
+}
+
+function convertBulletLists(text: string): string {
+  return text.replace(/^- /gm, '• ')
 }
 
 function convertTablesToCodeBlocks(text: string): string {
@@ -238,6 +244,7 @@ function convertTablesToCodeBlocks(text: string): string {
  * Converts standard Markdown to Telegram MarkdownV2 format.
  */
 export function toMarkdownV2(text: string): string {
+  text = convertBulletLists(text)
   text = convertTablesToCodeBlocks(text)
   const out: string[] = []
   let i = 0
@@ -273,6 +280,16 @@ export function toMarkdownV2(text: string): string {
         continue
       }
     }
+    // Italic *...* (single asterisk, not bold)
+    if (text[i] === '*' && text[i + 1] !== '*' && text[i + 1] !== ' ' && text[i + 1] !== undefined) {
+      const closeIdx = text.indexOf('*', i + 1)
+      if (closeIdx !== -1 && !text.slice(i + 1, closeIdx).includes('\n')) {
+        out.push('_' + escapePlain(text.slice(i + 1, closeIdx)) + '_')
+        i = closeIdx + 1
+        continue
+      }
+    }
+
     if (text[i] === '[') {
       const closeBracket = text.indexOf(']', i + 1)
       if (closeBracket !== -1 && text[closeBracket + 1] === '(') {
@@ -304,6 +321,7 @@ export function toMarkdownV2(text: string): string {
         text.startsWith('```', j) ||
         (c === '`' && text[j + 1] !== '`') ||
         text.startsWith('**', j) ||
+        (c === '*' && text[j + 1] !== '*' && text[j + 1] !== ' ') ||
         c === '[' ||
         (c === '#' && (j === 0 || text[j - 1] === '\n'))
       ) break

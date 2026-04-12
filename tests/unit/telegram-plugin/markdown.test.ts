@@ -40,6 +40,18 @@ describe('hasMarkdown()', () => {
   test('plain URL without link syntax is false', () => {
     expect(hasMarkdown('visit https://example.com')).toBe(false)
   })
+
+  test('detects *italic*', () => {
+    expect(hasMarkdown('this is *italic* text')).toBe(true)
+  })
+
+  test('detects bullet list', () => {
+    expect(hasMarkdown('- item one\n- item two')).toBe(true)
+  })
+
+  test('single asterisk math expression is not markdown', () => {
+    expect(hasMarkdown('price is 5 * 2 = 10')).toBe(false)
+  })
 })
 
 describe('toMarkdownV2()', () => {
@@ -147,6 +159,39 @@ describe('toMarkdownV2()', () => {
       expect(result).toContain('```')
       expect(result).toContain('Before')
       expect(result).toContain('After')
+    })
+  })
+
+  describe('italic conversion', () => {
+    test('converts *italic* to _italic_', () => {
+      expect(toMarkdownV2('*italic*')).toBe('_italic_')
+    })
+
+    test('italic with special chars escaped inside', () => {
+      expect(toMarkdownV2('*hello.world*')).toBe('_hello\\.world_')
+    })
+
+    test('italic surrounded by plain text', () => {
+      expect(toMarkdownV2('This is *italic* text.')).toBe('This is _italic_ text\\.')
+    })
+  })
+
+  describe('bullet list conversion', () => {
+    test('converts - item to bullet character', () => {
+      expect(toMarkdownV2('- item one')).toBe('• item one')
+    })
+
+    test('converts multiple bullet items', () => {
+      const result = toMarkdownV2('- item one\n- item two\n- item three')
+      expect(result).toContain('• item one')
+      expect(result).toContain('• item two')
+      expect(result).toContain('• item three')
+    })
+
+    test('only converts line-start dash, not inline dash', () => {
+      const result = toMarkdownV2('foo-bar\n- item')
+      expect(result).toContain('• item')
+      expect(result).toContain('foo\\-bar')
     })
   })
 
