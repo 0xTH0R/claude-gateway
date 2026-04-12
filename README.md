@@ -285,6 +285,7 @@ claude-gateway/
 │   ├── api-auth.ts                     ← API key auth middleware (timing-safe)
 │   ├── config-loader.ts                ← load + validate config.json
 │   ├── config-migrator.ts              ← auto-migration for config schema changes
+│   ├── config-watcher.ts               ← hot-reload config on file change (chokidar)
 │   ├── cron-manager.ts                 ← persistent cron job manager (REST + agentTurn)
 │   ├── cron-router.ts                  ← Cron API router (auth + agent-scoped access)
 │   ├── cron-scheduler.ts               ← heartbeat task scheduler
@@ -332,8 +333,10 @@ claude-gateway/
         └── workspace/
             ├── CLAUDE.md               ← auto-generated, do not edit
             ├── AGENTS.md
+            ├── IDENTITY.md
             ├── SOUL.md
             ├── USER.md
+            ├── TOOLS.md
             ├── MEMORY.md
             ├── HEARTBEAT.md
             └── .telegram-state/
