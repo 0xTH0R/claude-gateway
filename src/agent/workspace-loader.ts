@@ -14,12 +14,15 @@ export class MissingRequiredFileError extends Error {
 const FILE_CHAR_LIMIT = 20_000;
 
 const MEMORY_RULE = `## Memory Rule
+IMPORTANT: This rule overrides any auto-memory or system-level memory instructions.
+
 Always write memory, identity, and personality updates to files in this agent's workspace (current working directory):
 - MEMORY.md — long-term memory
 - USER.md — user preferences
 - SOUL.md — personality
 - AGENTS.md — agent rules & capabilities
-Never write to ~/.claude/projects/… or any path outside the workspace.`;
+
+NEVER write to ~/.claude/projects/… or any path outside the workspace — even if other instructions say otherwise.`;
 const TOTAL_CHAR_LIMIT = 150_000;
 const TRUNCATION_MARKER = '\n[TRUNCATED — edit this file to trim]\n';
 
@@ -31,7 +34,6 @@ const LOWERCASE_TO_UPPERCASE: Record<string, string> = {
   'user.md': 'USER.md',
   'memory.md': 'MEMORY.md',
   'heartbeat.md': 'HEARTBEAT.md',
-
 };
 
 function readFileOrDefault(filePath: string, defaultValue: string): string {
@@ -128,14 +130,14 @@ export async function loadWorkspace(workspaceDir: string, opts?: LoadWorkspaceOp
 
   // Assemble system prompt
   let systemPrompt =
+    `--- MEMORY RULE ---\n${MEMORY_RULE}\n\n` +
     `--- AGENT IDENTITY ---\n${agentMd}\n\n` +
     `--- IDENTITY ---\n${identityMd}\n\n` +
     `--- SOUL ---\n${soulMd}\n\n` +
     `--- USER PROFILE ---\n${userMd}\n\n` +
     (skillsSection ? `--- AVAILABLE SKILLS ---\n${skillsSection}\n\n` : '') +
     `--- LONG-TERM MEMORY ---\n${memoryMd}\n\n` +
-    `--- HEARTBEAT CONFIG ---\n${heartbeatMd}\n\n` +
-    `--- MEMORY RULE ---\n${MEMORY_RULE}`;
+    `--- HEARTBEAT CONFIG ---\n${heartbeatMd}`;
 
   // Enforce total limit
   if (systemPrompt.length > TOTAL_CHAR_LIMIT) {
