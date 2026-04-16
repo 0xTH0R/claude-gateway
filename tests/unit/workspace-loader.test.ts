@@ -109,6 +109,17 @@ describe('workspace-loader', () => {
     expect(result.systemPrompt).toContain('--- USER PROFILE ---');
     expect(result.systemPrompt).toContain('--- LONG-TERM MEMORY ---');
     expect(result.systemPrompt).toContain('--- HEARTBEAT CONFIG ---');
+    expect(result.systemPrompt).toContain('--- MEMORY RULE ---');
+  });
+
+  // -------------------------------------------------------------------------
+  // TC-1: Memory rule is injected into system prompt
+  // -------------------------------------------------------------------------
+  it('TC-1: system prompt contains memory rule text', async () => {
+    const result = await loadWorkspace(path.join(FIXTURES, 'valid-full'));
+    expect(result.systemPrompt).toContain('## Memory Rule');
+    expect(result.systemPrompt).toContain('MEMORY.md');
+    expect(result.systemPrompt).toContain('AGENTS.md');
   });
 
   // -------------------------------------------------------------------------

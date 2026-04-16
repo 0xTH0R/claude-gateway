@@ -12,6 +12,14 @@ export class MissingRequiredFileError extends Error {
 }
 
 const FILE_CHAR_LIMIT = 20_000;
+
+const MEMORY_RULE = `## Memory Rule
+Always write memory, identity, and personality updates to files in this agent's workspace (current working directory):
+- MEMORY.md — long-term memory
+- USER.md — user preferences
+- SOUL.md — personality
+- AGENTS.md — agent rules & capabilities
+Never write to ~/.claude/projects/… or any path outside the workspace.`;
 const TOTAL_CHAR_LIMIT = 150_000;
 const TRUNCATION_MARKER = '\n[TRUNCATED — edit this file to trim]\n';
 
@@ -126,7 +134,8 @@ export async function loadWorkspace(workspaceDir: string, opts?: LoadWorkspaceOp
     `--- USER PROFILE ---\n${userMd}\n\n` +
     (skillsSection ? `--- AVAILABLE SKILLS ---\n${skillsSection}\n\n` : '') +
     `--- LONG-TERM MEMORY ---\n${memoryMd}\n\n` +
-    `--- HEARTBEAT CONFIG ---\n${heartbeatMd}`;
+    `--- HEARTBEAT CONFIG ---\n${heartbeatMd}\n\n` +
+    `--- MEMORY RULE ---\n${MEMORY_RULE}`;
 
   // Enforce total limit
   if (systemPrompt.length > TOTAL_CHAR_LIMIT) {
