@@ -144,7 +144,7 @@ function deleteSkillFile(dir: string, name: string): void {
 
 // Replicates the inline watcher callback in src/index.ts so the integration
 // test exercises the same sequence (reload -> setSkillRegistry ->
-// write CLAUDE.md -> restartIdleSessions).
+// write CLAUDE.md -> restartOrDefer).
 function wireSkillsWatcher(
   runner: AgentRunner,
   workspaceDir: string,
@@ -168,7 +168,7 @@ function wireSkillsWatcher(
         updated.systemPrompt,
         'utf8',
       );
-      await runner.restartIdleSessions();
+      await runner.restartOrDefer();
     },
   });
 }
@@ -241,7 +241,8 @@ describe('Skills hot-reload end-to-end', () => {
     await new Promise((r) => setTimeout(r, 100));
     const sess = getSessions(runner).get(chatId)!;
     expect(sess).toBeDefined();
-    setLastActivity(sess, 5_000);
+    // Simulate turn completed so restartOrDefer() stops the session immediately.
+    sess.setProcessing(false);
     return sess;
   }
 
@@ -315,8 +316,7 @@ describe('Skills hot-reload end-to-end', () => {
     await sendChannelPost(port, 'chat:hr4', 'hi');
     await new Promise((r) => setTimeout(r, 100));
     const sess = getSessions(runner).get('chat:hr4')!;
-    // Mark as freshly active so it's well inside the 1s idle window.
-    setLastActivity(sess, 0);
+    // Session is processing (isProcessing === true from sendChannelPost) — will be deferred, not stopped.
 
     watcher = wireSkillsWatcher(runner, workspaceDir, sharedSkillsDir, mcpToolsDir);
     await new Promise((r) => setTimeout(r, 150));

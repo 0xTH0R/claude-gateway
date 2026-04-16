@@ -150,6 +150,7 @@ export class AgentRunner extends EventEmitter {
                 });
               }
 
+              session.setProcessing(true);
               session.sendMessage(channelXml);
               session.touch();
               this.logger.debug('Injected channel turn into session', {
@@ -530,6 +531,7 @@ export class AgentRunner extends EventEmitter {
             }
           }
           if (obj['type'] === 'result') {
+            proc.setProcessing(false);
             // Always forward result text — it contains the agent's completion summary.
             // If the agent also called reply tool, this summary still reaches the user.
             const resultText = typeof obj['result'] === 'string' ? obj['result'] : '';
@@ -581,11 +583,19 @@ export class AgentRunner extends EventEmitter {
 
       // Clean up pending typing-done timer when session stops
       proc.once('exit', () => {
+        proc.setProcessing(false);
         if (typingDoneTimer) {
           clearTimeout(typingDoneTimer);
           typingDoneTimer = null;
         }
         this.writeTypingDone(mapKey);
+      });
+
+      // Deferred restart: stop session after its current turn completes
+      proc.once('deferredRestartReady', async () => {
+        this.logger.info('Deferred restart: stopping session after turn completed', { mapKey });
+        await proc.stop();
+        this.sessions.delete(mapKey);
       });
     }
 
@@ -823,24 +833,26 @@ export class AgentRunner extends EventEmitter {
    * Used by the skills hot-reload path so that SKILL.md changes take effect
    * without kicking users out of in-flight turns.
    */
-  async restartIdleSessions(): Promise<void> {
-    const IDLE_THRESHOLD_MS = 1000;
-    const toStop: string[] = [];
+  async restartOrDefer(): Promise<void> {
+    let immediate = 0;
+    let deferred = 0;
+    const toStopNow: string[] = [];
     for (const [id, proc] of this.sessions) {
-      if (proc.isIdle(IDLE_THRESHOLD_MS)) {
-        toStop.push(id);
+      if (proc.isProcessing) {
+        proc.markPendingRestart();
+        deferred++;
+      } else {
+        toStopNow.push(id);
       }
     }
-    for (const id of toStop) {
+    for (const id of toStopNow) {
       const proc = this.sessions.get(id);
       if (!proc) continue;
       await proc.stop();
       this.sessions.delete(id);
+      immediate++;
     }
-    this.logger.info('Restarted idle sessions for skill reload', {
-      stopped: toStop.length,
-      skipped: this.sessions.size,
-    });
+    this.logger.info('restartOrDefer: sessions restarted', { immediate, deferred });
   }
 
   /**
@@ -1060,6 +1072,7 @@ export class AgentRunner extends EventEmitter {
 
           // result event = end of turn
           if (obj['type'] === 'result') {
+            session.setProcessing(false);
             const resultText = (obj['result'] as string | undefined) ?? buffer.join('');
             done(resultText);
           }
@@ -1069,10 +1082,12 @@ export class AgentRunner extends EventEmitter {
       };
 
       const globalTimer = setTimeout(() => {
+        session.setProcessing(false);
         fail(Object.assign(new Error('Agent response timeout'), { code: 'TIMEOUT' }));
       }, opts.timeoutMs);
 
       session.on('output', onOutput);
+      session.setProcessing(true);
       session.sendMessage(channelXml);
       // Do NOT call resetQuiet() here — the quiet timer should only start
       // after the first output line arrives, otherwise it fires before the
@@ -1227,6 +1242,7 @@ export class AgentRunner extends EventEmitter {
 
         // Result = end of turn
         if (obj['type'] === 'result') {
+          session.setProcessing(false);
           lastPartialText = ''; // reset for next turn
           const resultText = (obj['result'] as string | undefined) ?? buffer.join('');
           done(resultText);
@@ -1237,6 +1253,7 @@ export class AgentRunner extends EventEmitter {
     };
 
     const globalTimer = setTimeout(() => {
+      session.setProcessing(false);
       fail(Object.assign(new Error('Agent response timeout'), { code: 'TIMEOUT' }));
     }, opts.timeoutMs);
 
@@ -1249,6 +1266,7 @@ export class AgentRunner extends EventEmitter {
       `Do NOT call any tools. Your text output will be returned directly to the caller.]\n` +
       `</channel>`;
 
+    session.setProcessing(true);
     session.sendMessage(channelXml);
 
     // Return cleanup function for client disconnect

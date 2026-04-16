@@ -261,16 +261,16 @@ describe('AgentRunner (session pool)', () => {
   }, 15000);
 });
 
-// ── restartIdleSessions (skills hot-reload support) ───────────────────────────
+// ── restartOrDefer (skills hot-reload support) ────────────────────────────────
 
-describe('AgentRunner — restartIdleSessions', () => {
+describe('AgentRunner — restartOrDefer', () => {
   let tmpDir: string;
   let agentConfig: AgentConfig;
   let gatewayConfig: GatewayConfig;
   let runner: AgentRunner;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-restart-idle-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-restart-defer-'));
     agentConfig = makeAgentConfig(path.join(tmpDir, 'workspace'));
     fs.mkdirSync(agentConfig.workspace, { recursive: true });
     gatewayConfig = makeGatewayConfig();
@@ -286,15 +286,10 @@ describe('AgentRunner — restartIdleSessions', () => {
     jest.clearAllMocks();
   });
 
-  // Force a session's idle state by rewriting its lastActivityAt.
-  function setLastActivity(proc: SessionProcess, msAgo: number): void {
-    (proc as unknown as { lastActivityAt: number }).lastActivityAt = Date.now() - msAgo;
-  }
-
   // --------------------------------------------------------------------------
-  // RS1: stops an idle session subprocess
+  // RS1: stops a non-processing session immediately
   // --------------------------------------------------------------------------
-  it('RS1: stops an idle session subprocess', async () => {
+  it('RS1: stops a non-processing session subprocess immediately', async () => {
     runner = new AgentRunner(agentConfig, gatewayConfig);
     await runner.start();
 
@@ -304,20 +299,19 @@ describe('AgentRunner — restartIdleSessions', () => {
 
     const sess = getSessions(runner).get('chat:idle')!;
     expect(sess).toBeDefined();
+    // Simulate turn completed: mark as not processing so it stops immediately.
+    sess.setProcessing(false);
 
-    // Mark as idle for well over the 1s threshold.
-    setLastActivity(sess, 5_000);
-
-    await runner.restartIdleSessions();
+    await runner.restartOrDefer();
 
     expect(getSessions(runner).has('chat:idle')).toBe(false);
     expect(getSessions(runner).size).toBe(0);
   }, 15000);
 
   // --------------------------------------------------------------------------
-  // RS2: leaves a busy session alone
+  // RS2: defers a processing session (does not stop immediately)
   // --------------------------------------------------------------------------
-  it('RS2: leaves a busy session alone', async () => {
+  it('RS2: defers restart for a processing session', async () => {
     runner = new AgentRunner(agentConfig, gatewayConfig);
     await runner.start();
 
@@ -326,21 +320,22 @@ describe('AgentRunner — restartIdleSessions', () => {
     await new Promise(r => setTimeout(r, 100));
 
     const sess = getSessions(runner).get('chat:busy')!;
-    // Freshly active: lastActivityAt is "now" — well below the 1s idle threshold.
-    setLastActivity(sess, 0);
+    // Mark session as processing.
+    sess.setProcessing(true);
     const stopSpy = jest.spyOn(sess, 'stop');
 
-    await runner.restartIdleSessions();
+    await runner.restartOrDefer();
 
+    // Session still in pool; stop not called yet.
     expect(stopSpy).not.toHaveBeenCalled();
     expect(getSessions(runner).has('chat:busy')).toBe(true);
     expect(getSessions(runner).size).toBe(1);
   }, 15000);
 
   // --------------------------------------------------------------------------
-  // RS3: mixed idle/busy — only idle is stopped
+  // RS3: mixed — idle stopped immediately, processing deferred
   // --------------------------------------------------------------------------
-  it('RS3: stops only idle sessions in a mixed pool', async () => {
+  it('RS3: stops idle sessions immediately; defers processing sessions', async () => {
     runner = new AgentRunner(agentConfig, gatewayConfig);
     await runner.start();
 
@@ -352,11 +347,13 @@ describe('AgentRunner — restartIdleSessions', () => {
 
     const sessA = getSessions(runner).get('chat:a')!;
     const sessB = getSessions(runner).get('chat:b')!;
-    setLastActivity(sessA, 10_000); // idle
-    setLastActivity(sessB, 0);       // busy
+    // sessA: reset processing (turn completed) → stops immediately
+    // sessB: remains processing (turn still running) → deferred
+    sessA.setProcessing(false);
+    // sessB.isProcessing is already true from sendChannelPost
     const stopSpyB = jest.spyOn(sessB, 'stop');
 
-    await runner.restartIdleSessions();
+    await runner.restartOrDefer();
 
     expect(getSessions(runner).has('chat:a')).toBe(false);
     expect(getSessions(runner).has('chat:b')).toBe(true);
@@ -372,7 +369,7 @@ describe('AgentRunner — restartIdleSessions', () => {
     await runner.start();
 
     expect(getSessions(runner).size).toBe(0);
-    await expect(runner.restartIdleSessions()).resolves.toBeUndefined();
+    await expect(runner.restartOrDefer()).resolves.toBeUndefined();
     expect(getSessions(runner).size).toBe(0);
   }, 15000);
 
@@ -388,12 +385,13 @@ describe('AgentRunner — restartIdleSessions', () => {
     await new Promise(r => setTimeout(r, 100));
 
     const sess = getSessions(runner).get('chat:keepalive')!;
-    setLastActivity(sess, 5_000);
+    // Simulate turn completed so session is stopped immediately.
+    sess.setProcessing(false);
 
     expect(runner.isRunning()).toBe(true);
     const portBefore = getCallbackPort(runner);
 
-    await runner.restartIdleSessions();
+    await runner.restartOrDefer();
 
     // Receiver still running; callback server still bound to the same port.
     expect(runner.isRunning()).toBe(true);
@@ -403,6 +401,32 @@ describe('AgentRunner — restartIdleSessions', () => {
     await sendChannelPost(port, 'chat:keepalive', 'again');
     await new Promise(r => setTimeout(r, 100));
     expect(getSessions(runner).has('chat:keepalive')).toBe(true);
+  }, 15000);
+
+  // --------------------------------------------------------------------------
+  // RS6: deferred session stops when setProcessing(false) is called
+  // --------------------------------------------------------------------------
+  it('RS6: deferred session stops itself after turn completes', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    await sendChannelPost(port, 'chat:defer', 'hi');
+    await new Promise(r => setTimeout(r, 100));
+
+    const sess = getSessions(runner).get('chat:defer')!;
+    // isProcessing is already true from sendChannelPost
+
+    await runner.restartOrDefer();
+    // Still in pool — processing
+    expect(getSessions(runner).has('chat:defer')).toBe(true);
+
+    // Simulate turn completing
+    sess.setProcessing(false);
+    await new Promise(r => setTimeout(r, 50));
+
+    // Session should now be stopped and removed via deferredRestartReady listener
+    expect(getSessions(runner).has('chat:defer')).toBe(false);
   }, 15000);
 });
 
