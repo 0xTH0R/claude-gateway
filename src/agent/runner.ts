@@ -614,7 +614,7 @@ export class AgentRunner extends EventEmitter {
    * Returns true if the message content is a session management command.
    */
   private isSessionCommand(content: string): boolean {
-    return /^\/sessions?\b|^\/new(\s|$)|^\/clear\b|^\/compact\b|^\/rename(\s|$)/.test(content);
+    return /^\/sessions?\b|^\/new(\s|$)|^\/clear\b|^\/compact\b|^\/rename(\s|$)|^\/stop(\s|$)/.test(content);
   }
 
   /**
@@ -637,6 +637,8 @@ export class AgentRunner extends EventEmitter {
     } else if (content.startsWith('/rename')) {
       const name = content.replace('/rename', '').trim();
       await this.handleCommandRename(agentId, chatId, name);
+    } else if (content.startsWith('/stop')) {
+      await this.handleCommandStop(chatId);
     }
   }
 
@@ -728,6 +730,16 @@ export class AgentRunner extends EventEmitter {
     const sessionId = await this.sessionStore.getActiveSessionId(agentId, chatId);
     await this.sessionStore.updateSessionMeta(agentId, chatId, sessionId, { name });
     this.writeAutoForward(chatId, `✅ Session renamed to "${name}"`);
+  }
+
+  /**
+   * /stop — interrupt the in-flight turn for this chat by sending SIGINT to the subprocess.
+   * Leaves session history and metadata intact. Queued messages still process afterwards.
+   */
+  private async handleCommandStop(chatId: string): Promise<void> {
+    const session = this.sessions.get(chatId);
+    const stopped = session ? session.interrupt() : false;
+    this.writeAutoForward(chatId, stopped ? 'Stopped.' : 'No turn in progress.');
   }
 
   /**

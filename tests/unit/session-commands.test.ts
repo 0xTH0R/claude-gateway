@@ -271,3 +271,151 @@ describe('AgentRunner — /session info display (U22, U23)', () => {
     expect(text).toContain('Context: 25%');     // 50000/200000 = 25%
   }, 15000);
 });
+
+// ────────────────────────────────────────────────────────────────────────────
+// /stop command — interrupts the in-flight turn via SIGINT
+// ────────────────────────────────────────────────────────────────────────────
+
+describe('AgentRunner — /stop command', () => {
+  let tmpDir: string;
+  let agentConfig: AgentConfig;
+  let gatewayConfig: GatewayConfig;
+  let runner: AgentRunner;
+
+  const chatId = 'chat:stop-test';
+
+  function getForwardFile(): string {
+    return path.join(agentConfig.workspace, '.telegram-state', 'typing', `${chatId}.forward`);
+  }
+
+  function getForwardText(): string {
+    const forwardFile = getForwardFile();
+    expect(fs.existsSync(forwardFile)).toBe(true);
+    const content = JSON.parse(fs.readFileSync(forwardFile, 'utf8'));
+    return content.text as string;
+  }
+
+  type SessionLike = {
+    interrupt: () => boolean;
+    setProcessing: (v: boolean) => void;
+    process: MockChildProcess | null;
+  };
+
+  function getActiveSession(): SessionLike | undefined {
+    const sessions = (runner as unknown as { sessions: Map<string, SessionLike> }).sessions;
+    return sessions.get(chatId);
+  }
+
+  function getSessionSubprocess(): MockChildProcess {
+    const session = getActiveSession();
+    expect(session).toBeDefined();
+    expect(session!.process).not.toBeNull();
+    return session!.process!;
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-stop-'));
+    const workspace = path.join(tmpDir, 'agents', 'test-agent', 'workspace');
+    agentConfig = makeAgentConfig(workspace);
+    fs.mkdirSync(workspace, { recursive: true });
+    gatewayConfig = makeGatewayConfig(200000);
+    allProcesses.length = 0;
+    (require('child_process').spawn as jest.Mock).mockClear();
+  });
+
+  afterEach(async () => {
+    if (runner) await runner.stop();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    jest.clearAllMocks();
+  });
+
+  // T1 acceptance: /stop with no spawned session → "No turn in progress."
+  it('replies "No turn in progress." when there is no active session', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    await postChannelMessage(port, chatId, '/stop');
+    await new Promise(r => setTimeout(r, 300));
+
+    expect(getForwardText()).toBe('No turn in progress.');
+  }, 15000);
+
+  // T1 acceptance: /stop while session exists but no turn in flight
+  it('replies "No turn in progress." when session exists but is idle', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    // Spawn a session with a regular message — handler sets processing=true,
+    // but we manually clear it to simulate an idle session.
+    await postChannelMessage(port, chatId, 'hello');
+    await new Promise(r => setTimeout(r, 300));
+    const subprocess = getSessionSubprocess();
+    getActiveSession()!.setProcessing(false);
+
+    try { fs.rmSync(getForwardFile(), { force: true }); } catch {}
+
+    await postChannelMessage(port, chatId, '/stop');
+    await new Promise(r => setTimeout(r, 300));
+
+    expect(getForwardText()).toBe('No turn in progress.');
+    expect(subprocess.kill).not.toHaveBeenCalledWith('SIGINT');
+  }, 15000);
+
+  // T1 acceptance: /stop while turn in flight → SIGINT sent + "Stopped."
+  it('sends SIGINT and replies "Stopped." when a turn is in flight', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    await postChannelMessage(port, chatId, 'long task');
+    await new Promise(r => setTimeout(r, 300));
+    const subprocess = getSessionSubprocess();
+    // Simulate an in-flight turn
+    getActiveSession()!.setProcessing(true);
+
+    try { fs.rmSync(getForwardFile(), { force: true }); } catch {}
+
+    await postChannelMessage(port, chatId, '/stop');
+    await new Promise(r => setTimeout(r, 300));
+
+    expect(getForwardText()).toBe('Stopped.');
+    expect(subprocess.kill).toHaveBeenCalledWith('SIGINT');
+  }, 15000);
+
+  // T1 acceptance: /stop is never forwarded as user text to the subprocess
+  it('does not write /stop to the subprocess stdin', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    await postChannelMessage(port, chatId, 'hello');
+    await new Promise(r => setTimeout(r, 300));
+    const subprocess = getSessionSubprocess();
+    getActiveSession()!.setProcessing(true);
+
+    const writesBefore = (subprocess.stdin!.write as jest.Mock).mock.calls.length;
+
+    await postChannelMessage(port, chatId, '/stop');
+    await new Promise(r => setTimeout(r, 300));
+
+    const writesAfter = (subprocess.stdin!.write as jest.Mock).mock.calls.length;
+    expect(writesAfter).toBe(writesBefore);
+  }, 15000);
+
+  // Detector behaviour — guard against word-boundary false positives
+  it('does not match "/stopwatch" — forwards as a normal prompt', async () => {
+    runner = new AgentRunner(agentConfig, gatewayConfig);
+    await runner.start();
+
+    const port = getCallbackPort(runner);
+    await postChannelMessage(port, chatId, '/stopwatch');
+    await new Promise(r => setTimeout(r, 300));
+
+    const subprocess = getSessionSubprocess();
+    const stdinWrites = (subprocess.stdin!.write as jest.Mock).mock.calls;
+    const allWritten = stdinWrites.map(([s]) => s as string).join(' ');
+    expect(allWritten).toContain('/stopwatch');
+  }, 15000);
+});

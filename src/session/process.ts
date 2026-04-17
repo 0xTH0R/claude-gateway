@@ -619,6 +619,13 @@ export class SessionProcess extends EventEmitter {
     }
   }
 
+  interrupt(): boolean {
+    if (!this.process || this.process.killed) return false;
+    if (!this._processing) return false;
+    this.process.kill('SIGINT');
+    return true;
+  }
+
   markPendingRestart(): void {
     if (!this._processing) {
       this.emit('deferredRestartReady');

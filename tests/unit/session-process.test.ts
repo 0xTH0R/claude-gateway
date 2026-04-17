@@ -1009,4 +1009,50 @@ describe('SessionProcess — isProcessing and deferred restart', () => {
     expect(fired).toBe(true);  // fires when turn ends
     await sp.stop();
   });
+
+  // ── interrupt() ────────────────────────────────────────────────────────────
+
+  it('U-SP-INT-01: interrupt() sends SIGINT when a turn is in flight', async () => {
+    const sp = new SessionProcess('s1', 'telegram', agentConfig, gatewayConfig, sessionStore);
+    await sp.start();
+    sp.setProcessing(true);
+
+    const result = sp.interrupt();
+
+    expect(result).toBe(true);
+    expect(lastProcess!.kill).toHaveBeenCalledWith('SIGINT');
+  });
+
+  it('U-SP-INT-02: interrupt() returns false when no turn is in flight', async () => {
+    const sp = new SessionProcess('s1', 'telegram', agentConfig, gatewayConfig, sessionStore);
+    await sp.start();
+    // Do NOT setProcessing(true) — idle state
+
+    const result = sp.interrupt();
+
+    expect(result).toBe(false);
+    expect(lastProcess!.kill).not.toHaveBeenCalled();
+    await sp.stop();
+  });
+
+  it('U-SP-INT-03: interrupt() returns false when subprocess is already killed', async () => {
+    const sp = new SessionProcess('s1', 'telegram', agentConfig, gatewayConfig, sessionStore);
+    await sp.start();
+    sp.setProcessing(true);
+    lastProcess!.killed = true;
+
+    const result = sp.interrupt();
+
+    expect(result).toBe(false);
+    expect(lastProcess!.kill).not.toHaveBeenCalled();
+  });
+
+  it('U-SP-INT-04: interrupt() returns false when subprocess never started', () => {
+    const sp = new SessionProcess('s1', 'telegram', agentConfig, gatewayConfig, sessionStore);
+    // No start() — process is null
+
+    const result = sp.interrupt();
+
+    expect(result).toBe(false);
+  });
 });

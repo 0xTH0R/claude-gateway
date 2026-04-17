@@ -562,6 +562,7 @@ Once paired, the following bot commands are available in a private chat:
 | `/rename <name>` | Rename the current session |
 | `/clear` | Clear current session history (with confirmation) |
 | `/compact` | Summarise old history and keep only recent messages |
+| `/stop` | Interrupt the in-flight turn (gateway sends SIGINT to the subprocess) |
 | `/restart` | Graceful session restart — shows a confirmation button; confirms and notifies when the session is back online |
 
 **Agent**
