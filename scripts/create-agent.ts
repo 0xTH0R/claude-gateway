@@ -610,7 +610,7 @@ export async function pollForFirstMessage(
   const deadline = Date.now() + timeoutMs;
   let offset = 0;
   let dotCount = 0;
-  process.stdout.write('Waiting for pairing.');
+  process.stdout.write('Waiting for send any message.');
 
   while (Date.now() < deadline) {
     const remaining = Math.max(0, deadline - Date.now());
