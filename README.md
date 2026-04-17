@@ -1,37 +1,11 @@
+
 # Claude Gateway
 
 A self-hosted multi-agent gateway for Claude Code. Connect Claude agents to Telegram, HTTP APIs, and scheduled tasks — each agent runs in an isolated session with its own personality, memory, and tools.
 
-```
-                           ┌─────────────────────────────────────────────────┐
-                           │              Claude Gateway                     │
-                           │                                                 │
-Telegram Bot A ──►  TelegramReceiver(A)  ──► AgentRunner(A) ─┬─► Session(chat:111) ──► Claude + MCP
-                                                              ├─► Session(chat:222) ──► Claude + MCP
-Telegram Bot B ──►  TelegramReceiver(B)  ──► AgentRunner(B) ──┴─► Session(chat:333) ──► Claude + MCP
-                                                              │
-HTTP Client    ──►  POST /api/v1/.../messages ────────────────┴─► Session(api:uuid)  ──► Claude
-                    (sync JSON or SSE stream)
-                           │                                                 │
-                           │  GatewayRouter   (/health, /status, /ui, /api)  │
-                           │  CronScheduler   (HEARTBEAT.md + REST API)      │
-                           │  TypingManager   (live status indicators)        │
-                           └─────────────────────────────────────────────────┘
-
-                    ┌───────────────────────────────────┐
-                    │    MCP Server (per session)        │
-                    │    mcp/server.ts                   │
-                    │                                    │
-                    │  telegram_reply                    │
-                    │  telegram_react                    │
-                    │  telegram_edit_message              │
-                    │  telegram_download_attachment       │
-                    │  cron_list / cron_create / ...      │
-                    │  skill_create / skill_delete / ...  │
-                    └───────────────────────────────────┘
-```
-
-Each agent runs a **dedicated TelegramReceiver** (single poller per bot token) and a **session pool** of isolated Claude subprocesses — one per chat or API session. Each session gets its own **MCP server** (`mcp/server.ts`) exposing channel-specific tools (Telegram reply, react, cron management, skill management). Sessions persist history via `SessionStore`, so Claude remembers the conversation even after idle restart.
+<p align="center">
+  <img src="resource/claude_gateway.svg" alt="Claude Gateway" width="680" />
+</p>
 
 ---
 
@@ -211,6 +185,37 @@ Tokens are stored per-agent at `~/.claude-gateway/agents/<id>/.env` and auto-loa
 ---
 
 ## Architecture
+
+```
+                           ┌─────────────────────────────────────────────────┐
+                           │              Claude Gateway                     │
+                           │                                                 │
+Telegram Bot A ──►  TelegramReceiver(A)  ──► AgentRunner(A) ─┬─► Session(chat:111) ──► Claude + MCP
+                                                              ├─► Session(chat:222) ──► Claude + MCP
+Telegram Bot B ──►  TelegramReceiver(B)  ──► AgentRunner(B) ──┴─► Session(chat:333) ──► Claude + MCP
+                                                              │
+HTTP Client    ──►  POST /api/v1/.../messages ────────────────┴─► Session(api:uuid)  ──► Claude
+                    (sync JSON or SSE stream)
+                           │                                                 │
+                           │  GatewayRouter   (/health, /status, /ui, /api)  │
+                           │  CronScheduler   (HEARTBEAT.md + REST API)      │
+                           │  TypingManager   (live status indicators)        │
+                           └─────────────────────────────────────────────────┘
+
+                    ┌───────────────────────────────────┐
+                    │    MCP Server (per session)        │
+                    │    mcp/server.ts                   │
+                    │                                    │
+                    │  telegram_reply                    │
+                    │  telegram_react                    │
+                    │  telegram_edit_message              │
+                    │  telegram_download_attachment       │
+                    │  cron_list / cron_create / ...      │
+                    │  skill_create / skill_delete / ...  │
+                    └───────────────────────────────────┘
+```
+
+Each agent runs a **dedicated TelegramReceiver** (single poller per bot token) and a **session pool** of isolated Claude subprocesses — one per chat or API session. Each session gets its own **MCP server** (`mcp/server.ts`) exposing channel-specific tools (Telegram reply, react, cron management, skill management). Sessions persist history via `SessionStore`, so Claude remembers the conversation even after idle restart.
 
 ### Session Pool
 
