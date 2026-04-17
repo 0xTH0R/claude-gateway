@@ -645,6 +645,7 @@ const BOT_COMMANDS = [
   { command: 'rename', description: 'Rename current session' },
   { command: 'clear', description: 'Clear current session history' },
   { command: 'compact', description: 'Summarize and compress session history' },
+  { command: 'stop', description: 'Interrupt the agent and stop current work' },
   { command: 'restart', description: 'Graceful restart session' },
   { command: 'model', description: 'Show current AI model' },
   { command: 'models', description: 'Switch AI model' },
@@ -875,6 +876,7 @@ bot.command('help', async ctx => {
     `/rename <name> — rename current session\n` +
     `/clear — clear current session history\n` +
     `/compact — summarise and compress session history\n` +
+    `/stop — interrupt the running turn\n` +
     `/restart — graceful restart session\n\n` +
     `*Agent*\n` +
     `/model — show current AI model\n` +
