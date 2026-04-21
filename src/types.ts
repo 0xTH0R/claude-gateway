@@ -8,10 +8,18 @@ export interface AgentConfig {
   description: string;
   workspace: string;
   env: string;
-  telegram: {
+  telegram?: {
     botToken: string;
     allowedUsers: number[];
     dmPolicy: 'allowlist' | 'open';
+  };
+  discord?: {
+    botToken: string;
+    guildAllowlist?: string[];
+    channelAllowlist?: string[];
+    dmPolicy?: 'open' | 'allowlist' | 'disabled';
+    dmAllowlist?: string[];
+    autoThread?: boolean;
   };
   claude: {
     model: string;
