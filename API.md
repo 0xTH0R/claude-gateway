@@ -50,6 +50,12 @@ All API endpoints require an API key configured in `config.json`. Pass it via:
           "key": "admin-key-456",
           "description": "Admin — full access",
           "agents": "*"
+        },
+        {
+          "key": "automation-key-789",
+          "description": "Automation — may use tools",
+          "agents": ["alfred"],
+          "allow_tools": true
         }
       ]
     }
@@ -58,6 +64,8 @@ All API endpoints require an API key configured in `config.json`. Pass it via:
 ```
 
 `agents` can be an array of agent IDs or `"*"` for full access. Keys support `${ENV_VAR}` interpolation.
+
+`allow_tools` grants the key permission to invoke tools (Read, Bash, Grep, etc.). Tool access is governed entirely by this config — no extra field is needed in the request body. Keys without `allow_tools: true` are always conversational regardless of what the request contains.
 
 **2. Restart the gateway**
 
@@ -93,6 +101,9 @@ Send a message to an agent. Returns a JSON response or SSE stream.
 | `message` | Yes | Message text (max 10,000 chars) |
 | `session_id` | No | Resume an existing session; omit to start a new one |
 | `stream` | No | `true` to enable SSE streaming (default `false`) |
+| `timeout_ms` | No | Override the default response timeout in milliseconds (default 60000). Useful when the key has `allow_tools: true` and runs long-running tools |
+
+> Tool access is configured per API key in `config.json` — see `allow_tools` below.
 
 **New session:**
 
@@ -133,7 +144,7 @@ curl -X POST \
 | 403 | Invalid key or key has no access to that agent |
 | 404 | Agent ID not found |
 | 409 | Session is busy processing another request |
-| 504 | Agent did not respond within 60s |
+| 504 | Agent did not respond within timeout (default 60s) |
 | 500 | Internal error |
 
 > - `session_id` is optional — omit for a stateless one-shot call
@@ -164,6 +175,24 @@ data: {"type":"text_delta","text":"Here's the explanation..."}
 data: {"type":"result","text":"Here's the full explanation...","request_id":"550e8400-...","session_id":"abc-123","duration_ms":4200}
 data: [DONE]
 ```
+
+### Requests with tool use
+
+When the API key has `allow_tools: true` in `config.json`, the agent can call tools (Read, Bash, Grep, etc.). No extra field is needed in the request body — tool access is governed entirely by the key config. This applies to both sync and streaming modes.
+
+```bash
+curl -N -X POST \
+  -H "X-Api-Key: automation-key-789" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Run the setup script in /workspace and report the output",
+    "stream": true,
+    "timeout_ms": 120000
+  }' \
+  http://localhost:3000/api/v1/agents/alfred/messages
+```
+
+> Keys without `allow_tools: true` are always conversational — tools are never invoked regardless of what the request contains.
 
 **Event types:**
 

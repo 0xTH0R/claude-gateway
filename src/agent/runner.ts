@@ -985,7 +985,7 @@ export class AgentRunner extends EventEmitter {
   async sendApiMessage(
     sessionId: string,
     message: string,
-    opts: { timeoutMs: number },
+    opts: { timeoutMs: number; allowTools?: boolean },
   ): Promise<string> {
     if (this.pendingApiSessions.has(sessionId)) {
       const err = Object.assign(
@@ -1009,11 +1009,14 @@ export class AgentRunner extends EventEmitter {
     this.pendingApiSessions.add(sessionId);
     session.touch();
 
+    const systemNote = opts.allowTools
+      ? `[SYSTEM: This is an API request. You may use tools. Stream your progress as you work.]\n`
+      : `[SYSTEM: This is an API request. Reply with plain text only. Do NOT call any tools. Your text output will be returned directly to the caller.]\n`;
+
     const channelXml =
       `<channel source="api" session_id="${sessionId}" ts="${new Date().toISOString()}">\n` +
       `${message}\n\n` +
-      `[SYSTEM: This is an API request. Reply with plain text only. ` +
-      `Do NOT call any tools. Your text output will be returned directly to the caller.]\n` +
+      `${systemNote}` +
       `</channel>`;
 
     return new Promise<string>((resolve, reject) => {
@@ -1122,7 +1125,7 @@ export class AgentRunner extends EventEmitter {
       onDone: (fullText: string) => void;
       onError: (err: Error) => void;
     },
-    opts: { timeoutMs: number },
+    opts: { timeoutMs: number; allowTools?: boolean },
   ): Promise<() => void> {
     if (this.pendingApiSessions.has(sessionId)) {
       const err = Object.assign(
@@ -1272,11 +1275,15 @@ export class AgentRunner extends EventEmitter {
 
     session.on('output', onOutput);
 
+    const systemNote = opts.allowTools
+      ? `[SYSTEM: This is an API request. You may use tools. Stream your progress as you work.]\n`
+      : `[SYSTEM: This is an API request. Reply with plain text only. ` +
+        `Do NOT call any tools. Your text output will be returned directly to the caller.]\n`;
+
     const channelXml =
       `<channel source="api" session_id="${sessionId}" ts="${new Date().toISOString()}">\n` +
       `${message}\n\n` +
-      `[SYSTEM: This is an API request. Reply with plain text only. ` +
-      `Do NOT call any tools. Your text output will be returned directly to the caller.]\n` +
+      systemNote +
       `</channel>`;
 
     session.setProcessing(true);

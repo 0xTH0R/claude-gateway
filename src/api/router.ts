@@ -38,8 +38,13 @@ export function createApiRouter(
       return;
     }
 
-    const body = req.body as { message?: unknown; session_id?: unknown; stream?: unknown };
-    const { message, session_id, stream } = body;
+    const body = req.body as {
+      message?: unknown;
+      session_id?: unknown;
+      stream?: unknown;
+      timeout_ms?: unknown;
+    };
+    const { message, session_id, stream, timeout_ms } = body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       res.status(400).json({ error: 'message is required and must be a non-empty string' });
@@ -57,6 +62,10 @@ export function createApiRouter(
     const requestId = randomUUID();
     const sessionId = (session_id as string | undefined) ?? randomUUID();
     const startTime = Date.now();
+    const timeoutMs =
+      typeof timeout_ms === 'number' && timeout_ms > 0 && timeout_ms <= 600_000
+        ? timeout_ms
+        : DEFAULT_TIMEOUT_MS;
 
     if (stream) {
       // SSE streaming mode
@@ -100,7 +109,7 @@ export function createApiRouter(
           sessionId,
           message.trim(),
           sseCallbacks,
-          { timeoutMs: DEFAULT_TIMEOUT_MS },
+          { timeoutMs, allowTools: !!apiKey.allow_tools },
         );
 
         // Client disconnect -> cleanup
@@ -124,7 +133,8 @@ export function createApiRouter(
       // Synchronous mode (existing behavior)
       try {
         const response = await runner.sendApiMessage(sessionId, message.trim(), {
-          timeoutMs: DEFAULT_TIMEOUT_MS,
+          timeoutMs,
+          allowTools: !!apiKey.allow_tools,
         });
         res.json({
           request_id: requestId,

@@ -14,15 +14,16 @@ interface StreamCallbacks {
 }
 
 class MockAgentRunner extends EventEmitter {
-  sendApiMessageImpl: (sessionId: string, message: string) => Promise<string>;
+  sendApiMessageImpl: (sessionId: string, message: string, opts?: { allowTools?: boolean }) => Promise<string>;
   sendApiMessageStreamImpl?: (
     sessionId: string,
     message: string,
     callbacks: StreamCallbacks,
+    opts?: { timeoutMs: number; allowTools?: boolean },
   ) => Promise<() => void>;
   private _activeApiSessions = new Set<string>();
 
-  constructor(impl: (sessionId: string, message: string) => Promise<string>) {
+  constructor(impl: (sessionId: string, message: string, opts?: { allowTools?: boolean }) => Promise<string>) {
     super();
     this.sendApiMessageImpl = impl;
   }
@@ -30,19 +31,19 @@ class MockAgentRunner extends EventEmitter {
   async sendApiMessage(
     sessionId: string,
     message: string,
-    _opts: { timeoutMs: number },
+    opts: { timeoutMs: number; allowTools?: boolean },
   ): Promise<string> {
-    return this.sendApiMessageImpl(sessionId, message);
+    return this.sendApiMessageImpl(sessionId, message, { allowTools: opts.allowTools });
   }
 
   async sendApiMessageStream(
     sessionId: string,
     message: string,
     callbacks: StreamCallbacks,
-    _opts: { timeoutMs: number },
+    _opts: { timeoutMs: number; allowTools?: boolean },
   ): Promise<() => void> {
     if (this.sendApiMessageStreamImpl) {
-      return this.sendApiMessageStreamImpl(sessionId, message, callbacks);
+      return this.sendApiMessageStreamImpl(sessionId, message, callbacks, _opts);
     }
     throw new Error('sendApiMessageStream not implemented in mock');
   }
@@ -72,6 +73,7 @@ const agentConfig: AgentConfig = {
 const apiKeys: ApiKey[] = [
   { key: 'sk-test-app', agents: [AGENT_ID] },
   { key: 'sk-test-admin', agents: '*' },
+  { key: 'sk-test-tools', agents: [AGENT_ID], allow_tools: true },
 ];
 
 function buildApp(runnerImpl: (sessionId: string, msg: string) => Promise<string>) {
@@ -89,6 +91,7 @@ function buildStreamApp(
     sessionId: string,
     message: string,
     callbacks: StreamCallbacks,
+    opts?: { timeoutMs: number; allowTools?: boolean },
   ) => Promise<() => void>,
 ): { app: express.Express; runner: MockAgentRunner } {
   const runner = new MockAgentRunner(async () => 'ok');
@@ -289,6 +292,7 @@ describe('GET /api/v1/agents', () => {
 function collectSSE(
   app: express.Express,
   body: Record<string, unknown>,
+  auth = 'Bearer sk-test-app',
 ): Promise<{ status: number; headers: http.IncomingHttpHeaders; data: string }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, () => {
@@ -302,7 +306,7 @@ function collectSSE(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer sk-test-app',
+            'Authorization': auth,
             'Content-Length': Buffer.byteLength(reqBody),
           },
         },
@@ -468,6 +472,135 @@ describe('POST /api/v1/agents/:agentId/messages (stream: true)', () => {
 
     expect(cleanupCalled).toBe(true);
   }, 10000);
+
+  // T-ALLOW-TOOLS-1: key with allow_tools=true passes allowTools=true to runner
+  it('T-ALLOW-TOOLS-1: key with allow_tools=true passes allowTools=true to runner', async () => {
+    let capturedOpts: { timeoutMs: number; allowTools?: boolean } | undefined;
+    const runner = new MockAgentRunner(async () => 'ok');
+    runner.sendApiMessageStream = async (sid, msg, cbs, opts) => {
+      capturedOpts = opts as { timeoutMs: number; allowTools?: boolean };
+      cbs.onDone('done');
+      return () => {};
+    };
+
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    await collectSSE(app, { message: 'run job', stream: true }, 'Bearer sk-test-tools');
+
+    expect(capturedOpts).toBeDefined();
+    expect(capturedOpts!.allowTools).toBe(true);
+  });
+
+  // T-ALLOW-TOOLS-2: key without allow_tools passes allowTools=false to runner
+  it('T-ALLOW-TOOLS-2: key without allow_tools passes allowTools=false to runner', async () => {
+    let capturedOpts: { timeoutMs: number; allowTools?: boolean } | undefined;
+    const runner = new MockAgentRunner(async () => 'ok');
+    runner.sendApiMessageStream = async (sid, msg, cbs, opts) => {
+      capturedOpts = opts as { timeoutMs: number; allowTools?: boolean };
+      cbs.onDone('done');
+      return () => {};
+    };
+
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    await collectSSE(app, { message: 'hi', stream: true });
+
+    expect(capturedOpts!.allowTools).toBe(false);
+  });
+
+  // T-ALLOW-TOOLS-3: timeout_ms forwarded to runner
+  it('T-ALLOW-TOOLS-3: custom timeout_ms is forwarded to runner', async () => {
+    let capturedOpts: { timeoutMs: number; allowTools?: boolean } | undefined;
+    const runner = new MockAgentRunner(async () => 'ok');
+    runner.sendApiMessageStream = async (sid, msg, cbs, opts) => {
+      capturedOpts = opts as { timeoutMs: number; allowTools?: boolean };
+      cbs.onDone('done');
+      return () => {};
+    };
+
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    await collectSSE(app, { message: 'hi', stream: true, timeout_ms: 120000 });
+
+    expect(capturedOpts!.timeoutMs).toBe(120000);
+  });
+
+  // T-ALLOW-TOOLS-4: timeout_ms over max is clamped to default (60000)
+  it('T-ALLOW-TOOLS-4: timeout_ms over max is clamped to default', async () => {
+    let capturedOpts: { timeoutMs: number } | undefined;
+    const runner = new MockAgentRunner(async () => 'ok');
+    runner.sendApiMessageStream = async (sid, msg, cbs, opts) => {
+      capturedOpts = opts as { timeoutMs: number };
+      cbs.onDone('done');
+      return () => {};
+    };
+
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    await collectSSE(app, { message: 'hi', stream: true, timeout_ms: 999999 });
+
+    expect(capturedOpts!.timeoutMs).toBe(60000); // DEFAULT_TIMEOUT_MS
+  });
+
+  // I-API-14: key with allow_tools=true passes allowTools=true to sync runner
+  it('I-API-14: key with allow_tools=true passes allowTools=true to sync sendApiMessage', async () => {
+    let capturedAllowTools: boolean | undefined;
+    const runner = new MockAgentRunner(async (_sid, _msg, opts) => {
+      capturedAllowTools = opts?.allowTools;
+      return 'ok';
+    });
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    const res = await supertest.default(app)
+      .post(`/api/v1/agents/${AGENT_ID}/messages`)
+      .set('Authorization', 'Bearer sk-test-tools')
+      .send({ message: 'run job' });
+
+    expect(res.status).toBe(200);
+    expect(capturedAllowTools).toBe(true);
+  });
+
+  // I-API-15: key without allow_tools passes allowTools=false to sync runner
+  it('I-API-15: key without allow_tools passes allowTools=false to sync sendApiMessage', async () => {
+    let capturedAllowTools: boolean | undefined;
+    const runner = new MockAgentRunner(async (_sid, _msg, opts) => {
+      capturedAllowTools = opts?.allowTools;
+      return 'ok';
+    });
+    const runners = new Map([[AGENT_ID, runner as unknown as import('../../src/agent/runner').AgentRunner]]);
+    const configs = new Map([[AGENT_ID, agentConfig]]);
+    const app = express();
+    app.use(express.json());
+    app.use('/api', createApiRouter(runners, configs, apiKeys));
+
+    const res = await supertest.default(app)
+      .post(`/api/v1/agents/${AGENT_ID}/messages`)
+      .set('Authorization', 'Bearer sk-test-app')
+      .send({ message: 'hello' });
+
+    expect(res.status).toBe(200);
+    expect(capturedAllowTools).toBe(false);
+  });
 
   // T-API-STREAM-TCP: TCP_NODELAY is set on SSE connections (regression test)
   it('T-API-STREAM-TCP: SSE streaming works correctly with TCP_NODELAY set', async () => {
